@@ -2,7 +2,7 @@
 
 namespace Serious\BoxDB\Criteria;
 
-use Serious\BoxDB\Util;
+use Serious\BoxDB\Utils\Query;
 
 final class Contains implements CriteriaInterface
 {
@@ -66,8 +66,8 @@ final class Contains implements CriteriaInterface
         }
 
         return sprintf('(SELECT count(*) FROM json_each(document, %s) WHERE json_each.value IN (%s)) %s',
-            Util::quoteField($this->field),
-            Util::placeholders($this->parameters),
+            Query::quoteField($this->field),
+            Query::placeholders($this->parameters),
             $comparison
         );
     }
