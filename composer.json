@@ -1,0 +1,21 @@
+{
+    "name": "serious/boxdb",
+    "description": "BoxDB is a simple no-sql implementation on top of SQLite3 for PHP.",
+    "version": "0.0.1",
+    "type": "library",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Ken Lynch",
+            "email": "ken@seriousbrewing.co.uk"
+        }
+    ],
+    "require": {
+        "ramsey/uuid": "^4.1"
+    },
+    "autoload": {
+        "psr-4": {
+            "Serious\\BoxDB\\": "src"
+        }
+    }
+}
