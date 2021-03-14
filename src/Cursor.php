@@ -27,9 +27,10 @@ class Cursor implements IteratorAggregate
     public function fetch()
     {
         if ($row = $this->result->fetchArray(SQLITE3_ASSOC)) {
-            $row['document'] = json_decode($row['document'], true);
+            $document = array_merge($row, json_decode($row['document'], true));
+            unset($document['document']);
 
-            return $row;
+            return $document;
         }
 
         return false;

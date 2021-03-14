@@ -2,9 +2,13 @@
 
 namespace Serious\BoxDB;
 
+use DateTime;
+use DateTimeZone;
 use Serious\BoxDB\Criteria\CriteriaInterface;
+use Serious\BoxDB\Criteria\Filter;
 use Serious\BoxDB\Utils\Query;
 use SQLite3;
+use Symfony\Component\VarDumper\VarDumper;
 
 class Collection
 {
@@ -45,22 +49,51 @@ class Collection
         $this->connection->exec($sql);
     }
 
-    public function save(array $document)
+    public function save(array $document): array
     {
         $document = array_merge($this->defaults, $document);
+        $date = time();
 
         $id = $document['_id'] ?? null;
         unset($document['_id']);
 
-        $path = $document['_path'] ?? null;
+        $path = $document['_path'] ?? '/';
         unset($document['_path']);
 
-        $sql = sprintf('REPLACE INTO %s (_id, _path, document) VALUES (?, ?, ?)', $this->tableName);
+        unset($document['_created_at']);
+        unset($document['_updated_at']);
+
+        /**
+         * Try to update the document first.
+         */
+        $sql = sprintf('UPDATE OR IGNORE %s SET _updated_at = ?, document = ? WHERE _id = ? AND _path = ?', $this->tableName);
+        $stmt = $this->connection->prepare($sql);
+        $stmt->bindValue(1, $date);
+        $stmt->bindValue(2, json_encode($document));
+        $stmt->bindValue(3, $id);
+        $stmt->bindValue(4, $path);
+        $stmt->execute();
+
+        /**
+         * If nothing changed this must be an new document.
+         */
+        if ($this->connection->changes() == 0 ) {
+            $sql = sprintf('INSERT INTO %s (_id, _path, _created_at, _updated_at, document) VALUES (?, ?, ?, ?, ?)', $this->tableName);
+            $stmt = $this->connection->prepare($sql);
+            $stmt->bindValue(1, $id);
+            $stmt->bindValue(2, $path);
+            $stmt->bindValue(3, $date);
+            $stmt->bindValue(4, $date);
+            $stmt->bindValue(5, json_encode($document));
+            $stmt->execute();
+        }
+
+        $sql = sprintf('SELECT * FROM %s WHERE _id = ? AND _path = ?', $this->tableName);
         $stmt = $this->connection->prepare($sql);
         $stmt->bindValue(1, $id);
         $stmt->bindValue(2, $path);
-        $stmt->bindValue(3, json_encode($document));
-        $stmt->execute();
+
+        return (new Cursor($stmt->execute()))->fetch();
     }
 
     public function count(?CriteriaInterface $where = null) {
@@ -106,7 +139,7 @@ class Collection
 
     public function find(CriteriaInterface $where, array $options = [])
     {
-        $sql = sprintf('SELECT _id, _path, document FROM %s WHERE %s',
+        $sql = sprintf('SELECT * FROM %s WHERE %s',
             $this->tableName,
             $where->getQuery()
         );

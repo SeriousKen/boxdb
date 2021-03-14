@@ -2,10 +2,8 @@
 
 namespace Serious\BoxDB;
 
-use Exception;
 use Psr\EventDispatcher\EventDispatcherInterface;
 use SQLite3;
-use Symfony\Component\VarDumper\VarDumper;
 
 class Database
 {
@@ -31,25 +29,15 @@ class Database
 
         if ($this->connection->changes()) {
             $sql = "CREATE TABLE box_collection_{$name} (
-                    _id TEXT,
-                    _path TEXT,
+                    _id TEXT NOT NULL,
+                    _path TEXT NOT NULL,
                     _created_at DATETIME,
                     _updated_at DATETIME,
                     document TEXT,
                     PRIMARY KEY (_path, _id)
                 );
                 CREATE INDEX box_index_{$name}_created_at ON box_collection_{$name} (_created_at);
-                CREATE INDEX box_index_{$name}_updated_at ON box_collection_{$name} (_updated_at);
-                CREATE TRIGGER box_created_at_timestamp AFTER INSERT ON box_collection_{$name}
-                FOR EACH ROW
-                BEGIN
-                    UPDATE box_collection_{$name} SET _created_at = strftime('%s', 'now'), _updated_at = strftime('%s', 'now') WHERE _id IS new._id AND _path IS new._path;
-                END;
-                CREATE TRIGGER box_updated_at_timestamp AFTER UPDATE OF document ON box_collection_{$name}
-                FOR EACH ROW WHEN new.document <> old.document
-                BEGIN
-                    UPDATE box_collection_{$name} SET _updated_at = strftime('%s', 'now') WHERE _id IS new._id AND _path IS new._path;
-                END;";
+                CREATE INDEX box_index_{$name}_updated_at ON box_collection_{$name} (_updated_at);";
 
             $this->connection->exec($sql);
         }
