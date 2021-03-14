@@ -3,30 +3,33 @@
 namespace Serious\BoxDB;
 
 use IteratorAggregate;
+use Psr\EventDispatcher\EventDispatcherInterface;
 use SQLite3Result;
 
 class Cursor implements IteratorAggregate
 {
     protected $result;
 
-    public function __construct(SQLite3Result $result)
+    protected $dispatcher;
+
+    public function __construct(SQLite3Result $result, ?EventDispatcherInterface $dispatcher = null)
     {
         $this->result = $result;
     }
 
     public function getIterator()
     {
-        $this->result->reset();
-        
         while ($document = $this->fetch()) {
-            yield $document['_id'] => $document;
+            yield $document;
         }
     }
 
     public function fetch()
     {
         if ($row = $this->result->fetchArray(SQLITE3_ASSOC)) {
-            return json_decode($row['document'], true);
+            $row['document'] = json_decode($row['document'], true);
+
+            return $row;
         }
 
         return false;

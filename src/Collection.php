@@ -2,11 +2,9 @@
 
 namespace Serious\BoxDB;
 
-use Ramsey\Uuid\Uuid;
 use Serious\BoxDB\Criteria\CriteriaInterface;
 use Serious\BoxDB\Utils\Query;
 use SQLite3;
-use SQLite3Stmt;
 
 class Collection
 {
@@ -14,18 +12,30 @@ class Collection
 
     protected $name;
 
+    protected $defaults;
+
     protected $tableName;
 
-    public function __construct(SQLite3 $connection, string $name)
+    public function __construct(SQLite3 $connection, string $name, array $defaults = [])
     {
         $this->connection = $connection;
         $this->name = $name;
+        $this->defaults = $defaults;
         $this->tableName = $this->getTableName();
+    }
+
+    public function getName()
+    {
+        return $this->name;
     }
 
     public function createIndex(string $name, array $fields)
     {
-        $sql = sprintf('CREATE INDEX IF NOT EXISTS %s ON %s (%s)', $this->getIndexName($name), $this->tableName, $this->buildSort($fields));
+        $sql = sprintf('CREATE INDEX IF NOT EXISTS %s ON %s (%s)',
+            $this->getIndexName($name),
+            $this->tableName,
+            Query::buildSort($fields)
+        );    
         $this->connection->exec($sql);
     }
 
@@ -35,24 +45,21 @@ class Collection
         $this->connection->exec($sql);
     }
 
-    public function insert(array $document)
+    public function save(array $document)
     {
-        $_id = Uuid::uuid4()->getBytes();
-        $document['_id'] = Uuid::fromBytes($_id)->toString();
-        $sql = sprintf('INSERT INTO %s (_id, document) VALUES (?, ?)', $this->tableName);
-        $stmt = $this->connection->prepare($sql);
-        $stmt->bindValue(1, $_id);
-        $stmt->bindValue(2, json_encode($document));
-        $stmt->execute();
-    }
+        $document = array_merge($this->defaults, $document);
 
-    public function update(array $document)
-    {
-        $_id = Uuid::fromString($document['_id'])->getBytes();
-        $sql = sprintf('UPDATE %s SET document = ? WHERE _id = ?', $this->tableName);
+        $id = $document['_id'] ?? null;
+        unset($document['_id']);
+
+        $path = $document['_path'] ?? null;
+        unset($document['_path']);
+
+        $sql = sprintf('REPLACE INTO %s (_id, _path, document) VALUES (?, ?, ?)', $this->tableName);
         $stmt = $this->connection->prepare($sql);
-        $stmt->bindValue(1, $_id);
-        $stmt->bindValue(2, json_encode($document));
+        $stmt->bindValue(1, $id);
+        $stmt->bindValue(2, $path);
+        $stmt->bindValue(3, json_encode($document));
         $stmt->execute();
     }
 
@@ -60,13 +67,13 @@ class Collection
         $sql = sprintf('SELECT count(*) FROM %s', $this->tableName);
 
         if ($where) {
-            $sql .= ' WHERE '.$where->getQuery();
+            $sql .= sprintf(' WHERE %s', $where->getQuery());
         }
 
         $stmt = $this->connection->prepare($sql);
 
         if ($where) {
-            $this->bindParameters($stmt, $where->getParameters());
+            Query::bindParameters($stmt, $where->getParameters());
         }
 
         $result = $stmt->execute();
@@ -76,15 +83,15 @@ class Collection
 
     public function distinct(string $field, ?CriteriaInterface $where = null): array
     {
-        $sql = sprintf('SELECT DISTINCT json_each.value FROM %s, json_each(document, %s)',
+        $sql = sprintf("SELECT DISTINCT json_each.value FROM %s, json_each(document, '$.%s')",
             $this->tableName,
-            Query::quoteField($field)
+            Query::getSQLForField($field)
         );
 
         $stmt = $this->connection->prepare($sql);
 
         if ($where) {
-            $this->bindParameters($stmt, $where->getParameters());
+            Query::bindParameters($stmt, $where->getParameters());
         }
 
         $result = $stmt->execute();
@@ -99,18 +106,24 @@ class Collection
 
     public function find(CriteriaInterface $where, array $options = [])
     {
-        $sql = sprintf('SELECT * FROM %s WHERE %s', $this->tableName, $where->getQuery());
+        $sql = sprintf('SELECT _id, _path, document FROM %s WHERE %s',
+            $this->tableName,
+            $where->getQuery()
+        );
 
         if (isset($options['sort'])) {
-            $sql .= ' ORDER BY '.$this->buildSort($options['sort']);
+            $sql .= sprintf(' ORDER BY %s', Query::buildSort($options['sort']));
         }
 
         if (isset($options['limit'])) {
-            $sql .= sprintf(' LIMIT %d OFFSET %d', $options['limit'], $options['skip'] ?? 0);
+            $sql .= sprintf(" LIMIT %d OFFSET %d",
+                $options['limit'],
+                $options['skip'] ?? 0
+            );
         }
 
         $stmt = $this->connection->prepare($sql);
-        $this->bindParameters($stmt, $where->getParameters());
+        Query::bindParameters($stmt, $where->getParameters());
         
         return new Cursor($stmt->execute());
     }
@@ -125,9 +138,12 @@ class Collection
 
     public function delete(CriteriaInterface $where)
     {
-        $sql = sprintf('DELETE FROM %s WHERE %s', $this->tableName, $where->getQuery());
+        $sql = sprintf('DELETE FROM %s WHERE %s',
+            $this->tableName,
+            $where->getQuery()
+        );
         $stmt = $this->connection->prepare($sql);
-        $this->bindParameters($stmt, $where->getParameters());
+        Query::bindParameters($stmt, $where->getParameters());
     }
 
     protected function getTableName()
@@ -138,26 +154,5 @@ class Collection
     protected function getIndexName($name)
     {
         return 'box_index_'.$this->name.'_'.$name;
-    }
-
-    protected function buildSort(array $fields)
-    {
-        $sort = [];
-
-        foreach ($fields as $field => $order) {
-            $sort[] = sprintf('json_extract(document, %s) %s',
-                Query::quoteField($field),
-                $order == -1 ? 'DESC' : 'ASC'
-            );
-        }
-
-        return join(', ', $sort);
-    }
-
-    protected function bindParameters(SQLite3Stmt $stmt, array $parameters)
-    {
-        foreach ($parameters as $parameter => $value) {
-            $stmt->bindValue($parameter + 1, $value);
-        }
     }
 }

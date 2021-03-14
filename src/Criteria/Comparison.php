@@ -5,7 +5,7 @@ namespace Serious\BoxDB\Criteria;
 use RuntimeException;
 use Serious\BoxDB\Utils\Query;
 
-class Comparison implements CriteriaInterface
+final class Comparison implements CriteriaInterface
 {
     const EQ  = 1;
     const NE  = 2;
@@ -17,8 +17,8 @@ class Comparison implements CriteriaInterface
     const NIN = 8;
 
     protected $operators = [
-        self::EQ  => '=',
-        self::NE  => '<>',
+        self::EQ  => 'IS',
+        self::NE  => 'IS NOT',
         self::LT  => '<',
         self::LTE => '<=',
         self::GT  => '>=',
@@ -42,7 +42,7 @@ class Comparison implements CriteriaInterface
 
     public function getQuery(): string
     {
-        $sql = sprintf('json_extract(document, %s) %s', Query::quoteField($this->field), $this->getOperator($this->operator));
+        $sql = Query::getSQLForField($this->field).' '.$this->getOperator($this->operator);
 
         if ($this->operator == self::IN || $this->operator == self::NIN) {
             $sql .= ' ('. Query::placeholders($this->parameters). ')';

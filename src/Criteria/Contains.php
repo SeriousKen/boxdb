@@ -65,8 +65,8 @@ final class Contains implements CriteriaInterface
                 break;
         }
 
-        return sprintf('(SELECT count(*) FROM json_each(document, %s) WHERE json_each.value IN (%s)) %s',
-            Query::quoteField($this->field),
+        return sprintf("(SELECT count(*) FROM json_each(document, '$.%s') WHERE json_each.value IN (%s)) %s",
+            $this->field,
             Query::placeholders($this->parameters),
             $comparison
         );
