@@ -3,16 +3,13 @@
 namespace Serious\BoxDB;
 
 use IteratorAggregate;
-use Psr\EventDispatcher\EventDispatcherInterface;
 use SQLite3Result;
 
-class Cursor implements IteratorAggregate
+class Result implements IteratorAggregate
 {
     protected $result;
 
-    protected $dispatcher;
-
-    public function __construct(SQLite3Result $result, ?EventDispatcherInterface $dispatcher = null)
+    public function __construct(SQLite3Result $result)
     {
         $this->result = $result;
     }
@@ -27,12 +24,17 @@ class Cursor implements IteratorAggregate
     public function fetch()
     {
         if ($row = $this->result->fetchArray(SQLITE3_ASSOC)) {
-            $document = array_merge($row, json_decode($row['document'], true));
-            unset($document['document']);
+            $document = json_decode($row['document'], true);
+            unset($row['document']);
 
-            return $document;
+            return array_merge($row, $document);
         }
 
         return false;
+    }
+
+    public function fetchAll(): array
+    {
+        return iterator_to_array($this);
     }
 }

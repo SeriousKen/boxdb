@@ -2,13 +2,14 @@
 
 namespace Serious\BoxDB;
 
-use DateTime;
-use DateTimeZone;
-use Serious\BoxDB\Criteria\CriteriaInterface;
-use Serious\BoxDB\Criteria\Filter;
-use Serious\BoxDB\Utils\Query;
+use RuntimeException;
+use Serious\BoxDB\Query\Expression\ExpressionInterface;
+use Serious\BoxDB\Query\Count;
+use Serious\BoxDB\Query\Delete;
+use Serious\BoxDB\Query\Distinct;
+use Serious\BoxDB\Query\Select;
+use Serious\BoxDB\Utils\SQL;
 use SQLite3;
-use Symfony\Component\VarDumper\VarDumper;
 
 class Collection
 {
@@ -20,25 +21,31 @@ class Collection
 
     protected $tableName;
 
-    public function __construct(SQLite3 $connection, string $name, array $defaults = [])
+    public function __construct(SQLite3 $connection, string $name, array $options = [])
     {
         $this->connection = $connection;
         $this->name = $name;
-        $this->defaults = $defaults;
+        $this->options = $options;
         $this->tableName = $this->getTableName();
     }
 
-    public function getName()
+    /**
+     * 
+     */
+    public function getName(): string
     {
         return $this->name;
     }
 
+    /**
+     * Creates an index on the container.
+     */
     public function createIndex(string $name, array $fields)
     {
         $sql = sprintf('CREATE INDEX IF NOT EXISTS %s ON %s (%s)',
             $this->getIndexName($name),
             $this->tableName,
-            Query::buildSort($fields)
+            SQL::sort($fields)
         );    
         $this->connection->exec($sql);
     }
@@ -49,119 +56,96 @@ class Collection
         $this->connection->exec($sql);
     }
 
-    public function save(array $document): array
+    public function save(array $document)
     {
-        $document = array_merge($this->defaults, $document);
+        $this->connection->exec('SAVEPOINT save_document');
+
         $date = time();
 
-        $id = $document['_id'] ?? null;
-        unset($document['_id']);
+        if ($name = $document['_name'] ?? null) {
+            $path = $document['_path'] ?? null;
+            $pathname = rtrim($path, '/').'/'.$name;
+        } elseif ($pathname = $document['_pathname'] ?? null) {
+            $path = dirname($pathname) == '/' ? null : dirname($pathname);
+            $name = basename($pathname);
+        } else {
+            throw new RuntimeException('Document must have _name or _pathname set');
+        }
 
-        $path = $document['_path'] ?? '/';
-        unset($document['_path']);
-
-        unset($document['_created_at']);
-        unset($document['_updated_at']);
+        unset($document['_name'], $document['_path'], $document['_pathname'], $document['_created_at'], $document['_updated_at']);
+        $json = json_encode($document);
 
         /**
-         * Try to update the document first.
+         * Try to insert the document first.
          */
-        $sql = sprintf('UPDATE OR IGNORE %s SET _updated_at = ?, document = ? WHERE _id = ? AND _path = ?', $this->tableName);
+        $sql = sprintf('INSERT OR IGNORE INTO %s (_name, _path, _pathname, _created_at, _updated_at, document) VALUES (?, ?, ?, ?, ?, ?)', $this->tableName);
         $stmt = $this->connection->prepare($sql);
-        $stmt->bindValue(1, $date);
-        $stmt->bindValue(2, json_encode($document));
-        $stmt->bindValue(3, $id);
-        $stmt->bindValue(4, $path);
+        $stmt->bindValue(1, $name);
+        $stmt->bindValue(2, $path);
+        $stmt->bindValue(3, $pathname);
+        $stmt->bindValue(4, $date);
+        $stmt->bindValue(5, $date);
+        $stmt->bindValue(6, $json);
         $stmt->execute();
 
         /**
-         * If nothing changed this must be an new document.
+         * If nothing was inserted then perform an update.
          */
         if ($this->connection->changes() == 0 ) {
-            $sql = sprintf('INSERT INTO %s (_id, _path, _created_at, _updated_at, document) VALUES (?, ?, ?, ?, ?)', $this->tableName);
+            $sql = sprintf('UPDATE %s SET _updated_at = ?, document = ? WHERE _pathname = ?', $this->tableName);
             $stmt = $this->connection->prepare($sql);
-            $stmt->bindValue(1, $id);
-            $stmt->bindValue(2, $path);
-            $stmt->bindValue(3, $date);
-            $stmt->bindValue(4, $date);
-            $stmt->bindValue(5, json_encode($document));
+            $stmt->bindValue(1, $date);
+            $stmt->bindValue(2, $json);
+            $stmt->bindValue(3, $pathname);
             $stmt->execute();
         }
 
-        $sql = sprintf('SELECT * FROM %s WHERE _id = ? AND _path = ?', $this->tableName);
-        $stmt = $this->connection->prepare($sql);
-        $stmt->bindValue(1, $id);
-        $stmt->bindValue(2, $path);
-
-        return (new Cursor($stmt->execute()))->fetch();
+        $this->connection->exec('RELEASE SAVEPOINT save_document');
     }
 
-    public function count(?CriteriaInterface $where = null) {
-        $sql = sprintf('SELECT count(*) FROM %s', $this->tableName);
-
-        if ($where) {
-            $sql .= sprintf(' WHERE %s', $where->getQuery());
-        }
-
-        $stmt = $this->connection->prepare($sql);
-
-        if ($where) {
-            Query::bindParameters($stmt, $where->getParameters());
-        }
-
-        $result = $stmt->execute();
+    public function count(?ExpressionInterface $where = null)
+    {
+        $query = new Count($this->connection, $this->getTableName(), [
+            'filter' => $where,
+        ]);
+        $result = $query->execute();
 
         return $result->fetchArray(SQLITE3_NUM)[0];
     }
 
-    public function distinct(string $field, ?CriteriaInterface $where = null): array
+    /**
+     * Retrieve distinct values for a field.
+     * 
+     * @param string $field
+     * @param ExpressionInterface|null $where
+     * @return array
+     */
+    public function distinct(string $field, ?ExpressionInterface $where = null): array
     {
-        $sql = sprintf("SELECT DISTINCT json_each.value FROM %s, json_each(document, '$.%s')",
-            $this->tableName,
-            Query::getSQLForField($field)
-        );
-
-        $stmt = $this->connection->prepare($sql);
-
-        if ($where) {
-            Query::bindParameters($stmt, $where->getParameters());
-        }
-
-        $result = $stmt->execute();
         $distinct = [];
+        $query = new Distinct($this->connection, $this->getTableName(), [
+            'field'  => $field,
+            'filter' => $where,
+        ]);
+        $result = $query->execute();
 
-        while ($value = $result->fetchArray(SQLITE3_NUM)) {
-            $distinct[] = $value[0];
+        while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
+            $distinct[] = $row['value'];
         }
 
         return $distinct;
     }
 
-    public function find(CriteriaInterface $where, array $options = [])
+    public function find(?ExpressionInterface $where = null, array $options = []): Result
     {
-        $sql = sprintf('SELECT * FROM %s WHERE %s',
-            $this->tableName,
-            $where->getQuery()
-        );
+        $options['filter'] = $where;
+        $query = new Select($this->connection, $this->getTableName(), $options);
+        $result = $query->execute();
 
-        if (isset($options['sort'])) {
-            $sql .= sprintf(' ORDER BY %s', Query::buildSort($options['sort']));
-        }
-
-        if (isset($options['limit'])) {
-            $sql .= sprintf(" LIMIT %d OFFSET %d",
-                $options['limit'],
-                $options['skip'] ?? 0
-            );
-        }
-
-        $stmt = $this->connection->prepare($sql);
-        Query::bindParameters($stmt, $where->getParameters());
-        
-        return new Cursor($stmt->execute());
+        return new Result($result);
     }
 
-    public function findOne(CriteriaInterface $where, array $options = [])
+    public function findOne(ExpressionInterface $where, array $options = [])
     {
         $options['limit'] = 1;
         $result = $this->find($where, $options);
@@ -169,14 +153,17 @@ class Collection
         return $result->fetch();
     }
 
-    public function delete(CriteriaInterface $where)
+    public function findAll(ExpressionInterface $where, array $options): array
     {
-        $sql = sprintf('DELETE FROM %s WHERE %s',
-            $this->tableName,
-            $where->getQuery()
-        );
-        $stmt = $this->connection->prepare($sql);
-        Query::bindParameters($stmt, $where->getParameters());
+        return $this->find($where, $options)->fetchAll();
+    }
+
+    public function delete(ExpressionInterface $where)
+    {
+        $query = new Delete($this->connection, $this->getTableName(), [
+            'filter' => $where,
+        ]);
+        $query->execute();
     }
 
     protected function getTableName()

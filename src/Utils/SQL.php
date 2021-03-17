@@ -4,9 +4,9 @@ namespace Serious\BoxDB\Utils;
 
 use SQLite3Stmt;
 
-class Query
+final class SQL
 {
-    public static function getSQLForField(string $field): string
+    public static function field(string $field): string
     {
         if (strpos($field, '_') === 0) {
             return $field;
@@ -15,12 +15,17 @@ class Query
         }
     }
 
-    public static function buildSort(array $fields)
+    public static function sort(array $fields): string
     {
         $sort = [];
 
         foreach ($fields as $field => $order) {
-            $sort[] = Query::getSQLForField($field).' '.($order == -1 ? 'DESC' : 'ASC');
+            if (is_integer($field)) {
+                $field = $order;
+                $order = 1;
+            }
+            
+            $sort[] = self::field($field).' '.($order == -1 ? 'DESC' : 'ASC');
         }
 
         return join(', ', $sort);
