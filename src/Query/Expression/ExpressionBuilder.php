@@ -96,7 +96,13 @@ class ExpressionBuilder
     public function elemMatch(string $field, $where): ExpressionInterface
     {
         if (is_array($where)) {
-            $where = $this->fromFilter($where);
+            if (array_intersect_key($where, $this->comparison)) {
+                $where = $this->handleField('_element', $where);
+            } else {
+                $where = $this->fromFilter($where);
+            }
+        } elseif (!$where instanceof ExpressionInterface) {
+            $where = $this->eq('_element', $where);
         }
 
         return new ElemMatch($field, $where);
@@ -150,10 +156,6 @@ class ExpressionBuilder
         } elseif ($comparison == array_values($comparison)) {
             return $this->in($field, $comparison);
         }
-
-        // if (isset($comparison['$elemMatch'])) {
-        //     return $this->elemMatch($field, $this->fromFilter($comparison['$elemMatch']));
-        // }
 
         $expressions = [];
 

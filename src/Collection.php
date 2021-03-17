@@ -103,11 +103,9 @@ class Collection
         $this->connection->exec('RELEASE SAVEPOINT save_document');
     }
 
-    public function count(?ExpressionInterface $where = null)
+    public function count($where = null)
     {
-        $query = new Count($this->connection, $this->getTableName(), [
-            'filter' => $where,
-        ]);
+        $query = new Count($this->connection, $this->getTableName(), $where);
         $result = $query->execute();
 
         return $result->fetchArray(SQLITE3_NUM)[0];
@@ -120,12 +118,11 @@ class Collection
      * @param ExpressionInterface|null $where
      * @return array
      */
-    public function distinct(string $field, ?ExpressionInterface $where = null): array
+    public function distinct(string $field, $where = null): array
     {
         $distinct = [];
-        $query = new Distinct($this->connection, $this->getTableName(), [
+        $query = new Distinct($this->connection, $this->getTableName(), $where, [
             'field'  => $field,
-            'filter' => $where,
         ]);
         $result = $query->execute();
 
@@ -136,16 +133,15 @@ class Collection
         return $distinct;
     }
 
-    public function find(?ExpressionInterface $where = null, array $options = []): Result
+    public function find($where = null, array $options = []): Result
     {
-        $options['filter'] = $where;
-        $query = new Select($this->connection, $this->getTableName(), $options);
+        $query = new Select($this->connection, $this->getTableName(), $where, $options);
         $result = $query->execute();
 
         return new Result($result);
     }
 
-    public function findOne(ExpressionInterface $where, array $options = [])
+    public function findOne($where, array $options = [])
     {
         $options['limit'] = 1;
         $result = $this->find($where, $options);
@@ -153,16 +149,14 @@ class Collection
         return $result->fetch();
     }
 
-    public function findAll(ExpressionInterface $where, array $options): array
+    public function findAll($where, array $options): array
     {
         return $this->find($where, $options)->fetchAll();
     }
 
-    public function delete(ExpressionInterface $where)
+    public function delete($where)
     {
-        $query = new Delete($this->connection, $this->getTableName(), [
-            'filter' => $where,
-        ]);
+        $query = new Delete($this->connection, $this->getTableName(), $where);
         $query->execute();
     }
 

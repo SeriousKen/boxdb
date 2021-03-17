@@ -16,16 +16,6 @@ class Select extends Query
 
     protected function resolveOptions(OptionsResolver $resolver)
     {
-        $resolver->define('filter')
-            ->allowedTypes('null', 'array', ExpressionInterface::class)
-            ->normalize(function (Options $options, $value) {
-                if (is_array($value)) {
-                    return ExpressionBuilder::create()->fromFilter($value);
-                }
-
-                return $value;
-            })
-            ->default(null);
         $resolver->define('sort')->allowedTypes('null', 'int[]')->default(null);
         $resolver->define('limit')->allowedTypes('null', 'int')->default(null);
         $resolver->define('skip')->allowedTypes('int')->default(0);

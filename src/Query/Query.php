@@ -2,6 +2,9 @@
 
 namespace Serious\BoxDB\Query;
 
+use InvalidArgumentException;
+use Serious\BoxDB\Query\Expression\ExpressionBuilder;
+use Serious\BoxDB\Query\Expression\ExpressionInterface;
 use SQLite3;
 use SQLite3Result;
 use Symfony\Component\OptionsResolver\OptionsResolver;
@@ -12,12 +15,22 @@ abstract class Query implements QueryInterface
 
     protected $table;
 
+    protected $filter;
+
     protected $options;
 
-    public function __construct(SQLite3 $connection, string $table, array $options = [])
+    public function __construct(SQLite3 $connection, string $table, $filter = null, array $options = [])
     {
         $this->connection = $connection;
         $this->table      = $table;
+
+        if ($filter) {
+            if (is_array($filter)) {
+                $this->filter = ExpressionBuilder::create()->fromFilter($filter);
+            } elseif (!$filter instanceof ExpressionInterface) {
+                throw new InvalidArgumentException(sprintf('Filter must be an array or an instance of %s', ExpressionInterface::class));
+            }
+        }
 
         $resolver = new OptionsResolver();
         $this->resolveOptions($resolver);
@@ -29,9 +42,9 @@ abstract class Query implements QueryInterface
         $query = $this->getQuery();
         $parameters = [];
 
-        if (isset($this->options['filter'])) {
-            $query .= ' WHERE '.$this->options['filter']->getSQL('document');
-            $parameters = $this->options['filter']->getParameters();
+        if (isset($this->filter)) {
+            $query .= ' WHERE '.$this->filter->getSQL('document');
+            $parameters = $this->filter->getParameters();
         }
 
         if (isset($this->options['sort'])) {
