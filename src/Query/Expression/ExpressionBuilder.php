@@ -7,19 +7,22 @@ use RuntimeException;
 class ExpressionBuilder
 {
     protected $comparison = [
-        '$eq'        => 'eq',
-        '$ne'        => 'ne',
-        '$lt'        => 'lt',
-        '$lte'       => 'lte',
-        '$gt'        => 'gt',
-        '$gte'       => 'gte',
-        '$in'        => 'in',
-        '$nin'       => 'notIn',
-        '$like'      => 'like',
-        '$notLike'   => 'notLike',
-        '$matches'   => 'matches',
-        '$glob'      => 'glob',
-        '$elemMatch' => 'elemMatch',
+        '$eq'            => 'eq',
+        '$ne'            => 'ne',
+        '$lt'            => 'lt',
+        '$lte'           => 'lte',
+        '$gt'            => 'gt',
+        '$gte'           => 'gte',
+        '$in'            => 'in',
+        '$nin'           => 'notIn',
+        '$like'          => 'like',
+        '$notLike'       => 'notLike',
+        '$matches'       => 'matches',
+        '$glob'          => 'glob',
+        '$elemMatch'     => 'elemMatchAny',
+        '$elemMatchAny'  => 'elemMatchAny',
+        '$elemMatchAll'  => 'elemMatchAll',
+        '$elemMatchNone' => 'elemMatchNone',
     ];
 
     protected $composite = [
@@ -93,19 +96,36 @@ class ExpressionBuilder
         return new Comparison($field, Comparison::GLOB, $value);
     }
 
-    public function elemMatch(string $field, $where): ExpressionInterface
+    public function elemMatch(string $field, $where, $matches = ElemMatch::ANY): ExpressionInterface
     {
         if (is_array($where)) {
             if (array_intersect_key($where, $this->comparison)) {
-                $where = $this->handleField('_element', $where);
+                $where = $this->handleField('_document.value', $where);
+            } elseif ($where === array_values($where)) {
+                $where = $this->in('_document.value', $where);
             } else {
                 $where = $this->fromFilter($where);
             }
         } elseif (!$where instanceof ExpressionInterface) {
-            $where = $this->eq('_element', $where);
+            $where = $this->eq('_document.value', $where);
         }
 
-        return new ElemMatch($field, $where);
+        return new ElemMatch($field, $matches, $where);
+    }
+
+    public function elemMatchAny(string $field, $where): ExpressionInterface
+    {
+        return $this->elemMatch($field, $where, ElemMatch::ANY);
+    }
+
+    public function elemMatchAll(string $field, $where): ExpressionInterface
+    {
+        return $this->elemMatch($field, $where, ElemMatch::ALL);
+    }
+
+    public function elemMatchNone(string $field, $where): ExpressionInterface
+    {
+        return $this->elemMatch($field, $where, ElemMatch::NONE);
     }
 
     public function any(ExpressionInterface ...$expressions): Composite

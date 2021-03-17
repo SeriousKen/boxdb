@@ -7,8 +7,8 @@ use Serious\BoxDB\Query\Expression\ExpressionInterface;
 use Serious\BoxDB\Query\Count;
 use Serious\BoxDB\Query\Delete;
 use Serious\BoxDB\Query\Distinct;
+use Serious\BoxDB\Query\Helper;
 use Serious\BoxDB\Query\Select;
-use Serious\BoxDB\Utils\SQL;
 use SQLite3;
 
 class Collection
@@ -45,7 +45,7 @@ class Collection
         $sql = sprintf('CREATE INDEX IF NOT EXISTS %s ON %s (%s)',
             $this->getIndexName($name),
             $this->tableName,
-            SQL::sort($fields)
+            Helper::getOrderBy('document', $fields)
         );    
         $this->connection->exec($sql);
     }

@@ -2,6 +2,8 @@
 
 namespace Serious\BoxDB\Query\Expression;
 
+use InvalidArgumentException;
+
 /**
  * Composite expression combines multiple expressions together.
  */
@@ -14,7 +16,7 @@ final class Composite implements ExpressionInterface
     /**
      * 
      */
-    protected $match;
+    protected $matches;
 
     /**
      * 
@@ -24,16 +26,20 @@ final class Composite implements ExpressionInterface
     /**
      * 
      */
-    public function __construct($match, ExpressionInterface ...$expressions)
+    public function __construct($matches, ExpressionInterface ...$expressions)
     {
-        $this->match = $match;
+        if (!in_array($matches, [self::ANY, self::ANY, self::NONE])) {
+            throw new InvalidArgumentException(sprintf("Invalid composite match operator '%s'", $matches));
+        }
+
+        $this->matches = $matches;
         $this->expressions = $expressions;
     }
 
     public function getSQL(string $document): string
     {
-        $operator = $this->match == self::ALL ? ' AND ' : ' OR ';
-        $negate   = $this->match == self::NONE ? 'NOT ' : '';
+        $operator = $this->matches == self::ALL ? ' AND ' : ' OR ';
+        $negate   = $this->matches == self::NONE ? 'NOT ' : '';
 
         return $negate .'('. join($operator, array_map(function (ExpressionInterface $expression) use ($document) {
             return $expression->getSQL($document);

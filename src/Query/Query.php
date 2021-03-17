@@ -27,7 +27,9 @@ abstract class Query implements QueryInterface
         if ($filter) {
             if (is_array($filter)) {
                 $this->filter = ExpressionBuilder::create()->fromFilter($filter);
-            } elseif (!$filter instanceof ExpressionInterface) {
+            } elseif ($filter instanceof ExpressionInterface) {
+                $this->filter = $filter;
+            } else {
                 throw new InvalidArgumentException(sprintf('Filter must be an array or an instance of %s', ExpressionInterface::class));
             }
         }
@@ -48,7 +50,7 @@ abstract class Query implements QueryInterface
         }
 
         if (isset($this->options['sort'])) {
-            $query .= ' ORDER BY '. Helper::getOrderBy($this->options['sort']);
+            $query .= ' ORDER BY '. Helper::getOrderBy('document', $this->options['sort']);
         }
 
         if (isset($this->options['limit'])) {
@@ -57,8 +59,6 @@ abstract class Query implements QueryInterface
             $parameters[] = $this->options['skip'];
         }
 
-        echo $query."\n";
-        var_dump($parameters);
         $statement = $this->connection->prepare($query);
 
         foreach ($parameters as $parameter => $value) {
