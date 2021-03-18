@@ -27,7 +27,7 @@ class ElemMatch implements ExpressionInterface
         $this->where   = $where;
     }
 
-    public function getSQL(string $document): string
+    public function toSQL(string $document): string
     {
         $comparison = [
             self::ANY  => '> 0',
@@ -35,8 +35,8 @@ class ElemMatch implements ExpressionInterface
             self::NONE => '= 0',
         ];
         
-        return "(SELECT COUNT(_document.value) FROM json_each(document, '$.". $this->field
-            ."') AS _document WHERE ". $this->where->getSQL('_document.value') .") ". $comparison[$this->matches];
+        return "(SELECT COUNT(value) FROM json_each(document, '$.". $this->field
+            ."') WHERE ". $this->where->toSQL('value') .") ". $comparison[$this->matches];
     }
 
     public function getParameters(): array

@@ -45,12 +45,12 @@ abstract class Query implements QueryInterface
         $parameters = [];
 
         if (isset($this->filter)) {
-            $query .= ' WHERE '.$this->filter->getSQL('document');
+            $query .= ' WHERE '.$this->filter->toSQL('document');
             $parameters = $this->filter->getParameters();
         }
 
         if (isset($this->options['sort'])) {
-            $query .= ' ORDER BY '. Helper::getOrderBy('document', $this->options['sort']);
+            $query .= ' ORDER BY '. Helper::getOrderColumns('document', $this->options['sort']);
         }
 
         if (isset($this->options['limit'])) {
@@ -68,7 +68,10 @@ abstract class Query implements QueryInterface
         return $statement->execute();
     }
 
-    abstract protected function resolveOptions(OptionsResolver $resolver);
+    protected function resolveOptions(OptionsResolver $resolver)
+    {
+
+    }
 
     abstract protected function getQuery(): string;
 }

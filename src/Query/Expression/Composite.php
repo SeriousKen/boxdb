@@ -36,13 +36,13 @@ final class Composite implements ExpressionInterface
         $this->expressions = $expressions;
     }
 
-    public function getSQL(string $document): string
+    public function toSQL(string $document): string
     {
         $operator = $this->matches == self::ALL ? ' AND ' : ' OR ';
         $negate   = $this->matches == self::NONE ? 'NOT ' : '';
 
         return $negate .'('. join($operator, array_map(function (ExpressionInterface $expression) use ($document) {
-            return $expression->getSQL($document);
+            return $expression->toSQL($document);
         }, $this->expressions)) .')';
     }
 

@@ -2,11 +2,6 @@
 
 namespace Serious\BoxDB\Query;
 
-use Serious\BoxDB\Query\Expression\ExpressionBuilder;
-use Serious\BoxDB\Query\Expression\ExpressionInterface;
-use SQLite3;
-use SQLite3Result;
-use Symfony\Component\OptionsResolver\Options;
 use Symfony\Component\OptionsResolver\OptionsResolver;
 
 class Distinct extends Query

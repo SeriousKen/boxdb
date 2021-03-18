@@ -59,7 +59,7 @@ final class Comparison implements ExpressionInterface
         $this->operator = $operator;
     }
 
-    public function getSQL(string $document): string
+    public function toSQL(string $document): string
     {
         $sql = Helper::getColumn($document, $this->field).' '.$this->operators[$this->operator];
 

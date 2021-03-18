@@ -45,7 +45,7 @@ class Collection
         $sql = sprintf('CREATE INDEX IF NOT EXISTS %s ON %s (%s)',
             $this->getIndexName($name),
             $this->tableName,
-            Helper::getOrderBy('document', $fields)
+            Helper::getOrderColumns('document', $fields)
         );    
         $this->connection->exec($sql);
     }
@@ -92,7 +92,7 @@ class Collection
          * If nothing was inserted then perform an update.
          */
         if ($this->connection->changes() == 0 ) {
-            $sql = sprintf('UPDATE %s SET _updated_at = ?, document = ? WHERE _pathname = ?', $this->tableName);
+            $sql = sprintf('UPDATE %s SET _updated_at = ?, document = ? filter _pathname = ?', $this->tableName);
             $stmt = $this->connection->prepare($sql);
             $stmt->bindValue(1, $date);
             $stmt->bindValue(2, $json);
@@ -103,9 +103,9 @@ class Collection
         $this->connection->exec('RELEASE SAVEPOINT save_document');
     }
 
-    public function count($where = null)
+    public function count($filter = null)
     {
-        $query = new Count($this->connection, $this->getTableName(), $where);
+        $query = new Count($this->connection, $this->getTableName(), $filter);
         $result = $query->execute();
 
         return $result->fetchArray(SQLITE3_NUM)[0];
@@ -115,13 +115,13 @@ class Collection
      * Retrieve distinct values for a field.
      * 
      * @param string $field
-     * @param ExpressionInterface|null $where
+     * @param ExpressionInterface|null $filter
      * @return array
      */
-    public function distinct(string $field, $where = null): array
+    public function distinct(string $field, $filter = null): array
     {
         $distinct = [];
-        $query = new Distinct($this->connection, $this->getTableName(), $where, [
+        $query = new Distinct($this->connection, $this->getTableName(), $filter, [
             'field'  => $field,
         ]);
         $result = $query->execute();
@@ -133,30 +133,30 @@ class Collection
         return $distinct;
     }
 
-    public function find($where = null, array $options = []): Result
+    public function find($filter = null, array $options = []): Result
     {
-        $query = new Select($this->connection, $this->getTableName(), $where, $options);
+        $query = new Select($this->connection, $this->getTableName(), $filter, $options);
         $result = $query->execute();
 
         return new Result($result);
     }
 
-    public function findOne($where, array $options = [])
+    public function findOne($filter, array $options = [])
     {
         $options['limit'] = 1;
-        $result = $this->find($where, $options);
+        $result = $this->find($filter, $options);
 
         return $result->fetch();
     }
 
-    public function findAll($where, array $options): array
+    public function findAll($filter, array $options): array
     {
-        return $this->find($where, $options)->fetchAll();
+        return $this->find($filter, $options)->fetchAll();
     }
 
-    public function delete($where)
+    public function delete($filter)
     {
-        $query = new Delete($this->connection, $this->getTableName(), $where);
+        $query = new Delete($this->connection, $this->getTableName(), $filter);
         $query->execute();
     }
 
